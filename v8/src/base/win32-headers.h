@@ -30,7 +30,7 @@
 // Require Windows Vista or higher (this is required for the
 // QueryThreadCycleTime function to be present).
 #ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0600
+#define _WIN32_WINNT 0x0602
 #endif
 
 #include <windows.h>
@@ -42,7 +42,7 @@
 // Require Windows XP or higher when compiling with MinGW. This is for MinGW
 // header files to expose getaddrinfo.
 #undef _WIN32_WINNT
-#define _WIN32_WINNT 0x501
+#define _WIN32_WINNT 0x602
 #endif  // __MINGW32__
 #if !defined(__MINGW32__) || defined(__MINGW64_VERSION_MAJOR)
 #include <dbghelp.h>         // For SymLoadModule64 and al.
@@ -51,6 +51,10 @@
 #endif  // !defined(__MINGW32__) || defined(__MINGW64_VERSION_MAJOR)
 #include <limits.h>  // For INT_MAX and al.
 #include <tlhelp32.h>  // For Module32First and al.
+
+#include <eh.h>
+#include <synchapi.h>
+#include <realtimeapiset.h>
 
 // These additional WIN32 includes have to be right here as the #undef's below
 // makes it impossible to have them elsewhere.

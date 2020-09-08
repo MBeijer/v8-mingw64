@@ -5,6 +5,7 @@
 
 import os.path
 import sys
+sys.path.append('./v8/third_party/inspector_protocol')
 import argparse
 import collections
 import functools

@@ -37,6 +37,7 @@
 // the Microsoft Visual Studio C++ CRT.
 #ifdef __MINGW32__
 
+#define PAGE_TARGETS_INVALID 0x40000000
 
 #ifndef __MINGW64_VERSION_MAJOR
 
@@ -48,14 +49,13 @@ inline void MemoryFence() {
   __asm__ __volatile__("xchgl %%eax,%0 ":"=r" (barrier));
 }
 
-#endif  // __MINGW64_VERSION_MAJOR
-
-
 int localtime_s(tm* out_tm, const time_t* time) {
   tm* posix_local_time_struct = localtime_r(time, out_tm);
   if (posix_local_time_struct == nullptr) return 1;
   return 0;
 }
+
+#endif  // __MINGW64_VERSION_MAJOR
 
 
 int fopen_s(FILE** pFile, const char* filename, const char* mode) {

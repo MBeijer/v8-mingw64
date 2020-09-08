@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "src/base/win32-headers.h"
 #include "src/base/platform/mutex.h"
 
 #include <errno.h>

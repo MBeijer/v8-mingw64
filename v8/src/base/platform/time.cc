@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "src/base/win32-headers.h"
 #include "src/base/platform/time.h"
 
 #if V8_OS_POSIX
@@ -754,13 +755,13 @@ bool ThreadTicks::IsSupported() {
 ThreadTicks ThreadTicks::Now() {
 #if V8_OS_MACOSX
   return ThreadTicks(ComputeThreadTicks());
+#elif V8_OS_WIN
+  return ThreadTicks::GetForThread(::GetCurrentThread());
 #elif(defined(_POSIX_THREAD_CPUTIME) && (_POSIX_THREAD_CPUTIME >= 0)) || \
   defined(V8_OS_ANDROID)
   return ThreadTicks(ClockNow(CLOCK_THREAD_CPUTIME_ID));
 #elif V8_OS_SOLARIS
   return ThreadTicks(gethrvtime() / Time::kNanosecondsPerMicrosecond);
-#elif V8_OS_WIN
-  return ThreadTicks::GetForThread(::GetCurrentThread());
 #else
   UNREACHABLE();
 #endif
