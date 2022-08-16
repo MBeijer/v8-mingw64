@@ -1291,23 +1291,6 @@ void SimdScalarLowering::LowerFloatPseudoMinMax(Node* node, const Operator* op,
   ReplaceNode(node, rep_node, num_lanes);
 }
 
-void SimdScalarLowering::LowerFloatPseudoMinMax(Node* node, const Operator* op,
-                                                bool is_max, SimdType type) {
-  DCHECK_EQ(2, node->InputCount());
-  Node** rep_left = GetReplacementsWithType(node->InputAt(0), type);
-  Node** rep_right = GetReplacementsWithType(node->InputAt(1), type);
-  int num_lanes = NumLanes(type);
-  Node** rep_node = zone()->NewArray<Node*>(num_lanes);
-  MachineRepresentation rep = MachineTypeFrom(type).representation();
-  for (int i = 0; i < num_lanes; ++i) {
-    Node* cmp = is_max ? graph()->NewNode(op, rep_left[i], rep_right[i])
-                       : graph()->NewNode(op, rep_right[i], rep_left[i]);
-    Diamond d(graph(), common(), cmp);
-    rep_node[i] = d.Phi(rep, rep_right[i], rep_left[i]);
-  }
-  ReplaceNode(node, rep_node, num_lanes);
-}
-
 void SimdScalarLowering::LowerNode(Node* node) {
   SimdType rep_type = ReplacementType(node);
   int num_lanes = NumLanes(rep_type);

@@ -5,6 +5,7 @@
 #define V8_LIBPLATFORM_TRACING_RECORDER_WIN_H_
 
 #include <windows.h>
+#if !defined(__MINGW32__) && !defined(__MINGW64__)
 #include <TraceLoggingProvider.h>
 
 #include "src/libplatform/tracing/recorder.h"
@@ -68,5 +69,5 @@ void Recorder::AddEvent(TraceObject* trace_event) {
 }  // namespace tracing
 }  // namespace platform
 }  // namespace v8
-
+#endif
 #endif  // V8_LIBPLATFORM_TRACING_RECORDER_WIN_H_

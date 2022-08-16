@@ -153,7 +153,7 @@
 
 EXPORT_TEMPLATE_TEST(DEFAULT, );
 EXPORT_TEMPLATE_TEST(DEFAULT, __attribute__((visibility("default"))));
-EXPORT_TEMPLATE_TEST(DEFAULT, __declspec(dllexport));
+// EXPORT_TEMPLATE_TEST(DEFAULT, __declspec(dllexport));
 EXPORT_TEMPLATE_TEST(DEFAULT, __declspec(dllimport));
 
 #undef EXPORT_TEMPLATE_TEST

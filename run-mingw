@@ -1,0 +1,6 @@
+#!/bin/bash
+
+if [ ! -v TTY_ENABLED ]; then
+	export TTY_ENABLED="-it"
+fi
+docker run --rm ${TTY_ENABLED} -u $(id -u):$(id -g) -v $PWD/..:/tmp -v /home:/home -v /opt/$PFX/usr:/opt/$PFX/usr -w $PWD registry.home.eevul.net/mingw-docker "$@"

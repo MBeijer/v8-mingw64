@@ -496,7 +496,7 @@ target_link_libraries(v8_snapshot
 # Note: allow passing in v8_random_seed
 add_custom_command(
   COMMAND
-    mksnapshot
+    $<${is-win}:WINEPREFIX=${PROJECT_BINARY_DIR}/.wine> $<${is-win}:wine> ${PROJECT_BINARY_DIR}/mksnapshot$<${is-win}:.exe>
     --embedded_src ${PROJECT_BINARY_DIR}/embedded.S
     --startup_src ${PROJECT_BINARY_DIR}/snapshot.cc
     $<${is-x64}:--target_arch=x64>
@@ -716,7 +716,7 @@ target_link_libraries(v8_libbase
 #
 # bytecode_builtins_list_generator
 #
-v8_generate_builtins_list(${PROJECT_BINARY_DIR}/generated)
+v8_generate_builtins_list(${PROJECT_BINARY_DIR} ${PROJECT_BINARY_DIR}/generated)
 
 target_include_directories(v8-bytecodes-builtin-list
   INTERFACE
@@ -736,6 +736,8 @@ target_include_directories(bytecode_builtins_list_generator
 )
 
 target_link_libraries(bytecode_builtins_list_generator v8_libbase)
+target_compile_options(bytecode_builtins_list_generator PRIVATE -static-libgcc -static-libstdc++)
+target_link_options(bytecode_builtins_list_generator PRIVATE -static-libgcc -static-libstdc++)
 
 #
 # v8_torque_generated
@@ -841,10 +843,11 @@ target_include_directories(v8_torque_generated
     ${PROJECT_SOURCE_DIR}/v8/include
     ${PROJECT_SOURCE_DIR}/v8
 )
+set(WINE_STUFF "WINEPREFIX=${binary-dir}/.wine wine ")
 
 add_custom_command(
   COMMAND
-    torque
+    $<${is-win}:${WINE_STUFF}>${PROJECT_BINARY_DIR}/torque$<${is-win}:.exe>
     -o ${PROJECT_BINARY_DIR}/torque-generated
     -v8-root ${PROJECT_SOURCE_DIR}/v8
     ${torque_files}
@@ -876,7 +879,8 @@ file(GLOB torque-program-sources
 
 add_executable(torque)
 target_sources(torque PRIVATE ${torque-program-sources})
-target_compile_options(torque PRIVATE ${enable-exceptions})
+target_compile_options(torque PRIVATE ${enable-exceptions} -static-libgcc -static-libstdc++)
+target_link_options(torque PRIVATE -static-libgcc -static-libstdc++)
 target_include_directories(torque PRIVATE ${PROJECT_SOURCE_DIR}/v8)
 target_link_libraries(torque PRIVATE v8_libbase)
 
@@ -885,22 +889,40 @@ target_link_libraries(torque PRIVATE v8_libbase)
 #
 
 add_executable(mksnapshot
-  v8/src/init/setup-isolate-full.cc
-  v8/src/snapshot/embedded/embedded-empty.cc
-  v8/src/snapshot/embedded/embedded-file-writer.cc
-  v8/src/snapshot/embedded/platform-embedded-file-writer-aix.cc
-  v8/src/snapshot/embedded/platform-embedded-file-writer-base.cc
-  v8/src/snapshot/embedded/platform-embedded-file-writer-generic.cc
-  v8/src/snapshot/embedded/platform-embedded-file-writer-mac.cc
-  v8/src/snapshot/embedded/platform-embedded-file-writer-win.cc
-  v8/src/snapshot/mksnapshot.cc
-  v8/src/snapshot/snapshot-empty.cc
-)
+        v8/src/init/setup-isolate-full.cc
+        v8/src/snapshot/embedded/embedded-empty.cc
+        v8/src/snapshot/embedded/embedded-file-writer.cc
+        v8/src/snapshot/embedded/platform-embedded-file-writer-aix.cc
+        v8/src/snapshot/embedded/platform-embedded-file-writer-base.cc
+        v8/src/snapshot/embedded/platform-embedded-file-writer-generic.cc
+        v8/src/snapshot/embedded/platform-embedded-file-writer-mac.cc
+        v8/src/snapshot/embedded/platform-embedded-file-writer-win.cc
+        v8/src/snapshot/mksnapshot.cc
+        v8/src/snapshot/snapshot-empty.cc
+        )
 
 target_compile_definitions(mksnapshot PRIVATE $<${is-msvc}:_HAS_EXCEPTIONS=0>)
 target_compile_options(mksnapshot PRIVATE ${disable-exceptions})
 target_include_directories(mksnapshot PRIVATE ${PROJECT_SOURCE_DIR}/v8)
 target_link_libraries(mksnapshot
+        PRIVATE
+        v8_libbase
+        v8_libplatform
+        v8_base_without_compiler
+        v8_compiler
+        v8_initializers
+        v8-bytecodes-builtin-list
+        v8_torque_generated
+        )
+
+add_library(v8-adler32 OBJECT v8/third_party/zlib/adler32.c)
+target_include_directories(v8-adler32
+  PUBLIC
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/v8/third_party/zlib>
+)
+
+add_library(v8_monolith)
+target_link_libraries(v8_monolith
   PRIVATE
     v8_libbase
     v8_libplatform
@@ -909,10 +931,7 @@ target_link_libraries(mksnapshot
     v8_initializers
     v8-bytecodes-builtin-list
     v8_torque_generated
-)
-
-add_library(v8-adler32 OBJECT v8/third_party/zlib/adler32.c)
-target_include_directories(v8-adler32
-  PUBLIC
-    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/v8/third_party/zlib>
+    v8_snapshot
+    v8_inspector
+    pthread
 )
