@@ -3,6 +3,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import os
 import os.path
 import sys
 sys.path.append('./v8/third_party/inspector_protocol')
@@ -145,6 +146,7 @@ def dash_to_camelcase(word):
 
 
 def to_snake_case(name):
+  name = re.sub(r"([A-Z]{2,})([A-Z][a-z])", r"\1_\2", name)
   return re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", name, sys.maxsize).lower()
 
 
@@ -694,6 +696,11 @@ def main():
     sys.exit()
 
   for file_name, content in outputs.items():
+    # Remove output file first to account for potential case changes.
+    try:
+      os.remove(file_name)
+    except OSError:
+      pass
     out_file = open(file_name, "w")
     out_file.write(content)
     out_file.close()

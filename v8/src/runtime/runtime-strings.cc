@@ -21,11 +21,11 @@ namespace internal {
 RUNTIME_FUNCTION(Runtime_GetSubstitution) {
   HandleScope scope(isolate);
   DCHECK_EQ(5, args.length());
-  CONVERT_ARG_HANDLE_CHECKED(String, matched, 0);
-  CONVERT_ARG_HANDLE_CHECKED(String, subject, 1);
-  CONVERT_SMI_ARG_CHECKED(position, 2);
-  CONVERT_ARG_HANDLE_CHECKED(String, replacement, 3);
-  CONVERT_SMI_ARG_CHECKED(start_index, 4);
+  Handle<String> matched = args.at<String>(0);
+  Handle<String> subject = args.at<String>(1);
+  int position = args.smi_value_at(2);
+  Handle<String> replacement = args.at<String>(3);
+  int start_index = args.smi_value_at(4);
 
   // A simple match without captures.
   class SimpleMatch : public String::Match {
@@ -112,9 +112,9 @@ MaybeHandle<String> StringReplaceOneCharWithString(
 RUNTIME_FUNCTION(Runtime_StringReplaceOneCharWithString) {
   HandleScope scope(isolate);
   DCHECK_EQ(3, args.length());
-  CONVERT_ARG_HANDLE_CHECKED(String, subject, 0);
-  CONVERT_ARG_HANDLE_CHECKED(String, search, 1);
-  CONVERT_ARG_HANDLE_CHECKED(String, replace, 2);
+  Handle<String> subject = args.at<String>(0);
+  Handle<String> search = args.at<String>(1);
+  Handle<String> replace = args.at<String>(2);
 
   // If the cons string tree is too deep, we simply abort the recursion and
   // retry with a flattened subject string.
@@ -139,72 +139,6 @@ RUNTIME_FUNCTION(Runtime_StringReplaceOneCharWithString) {
   return isolate->StackOverflow();
 }
 
-// ES6 #sec-string.prototype.includes
-// String.prototype.includes(searchString [, position])
-RUNTIME_FUNCTION(Runtime_StringIncludes) {
-  HandleScope scope(isolate);
-  DCHECK_EQ(3, args.length());
-
-  Handle<Object> receiver = args.at(0);
-  if (receiver->IsNullOrUndefined(isolate)) {
-    THROW_NEW_ERROR_RETURN_FAILURE(
-        isolate, NewTypeError(MessageTemplate::kCalledOnNullOrUndefined,
-                              isolate->factory()->NewStringFromAsciiChecked(
-                                  "String.prototype.includes")));
-  }
-  Handle<String> receiver_string;
-  ASSIGN_RETURN_FAILURE_ON_EXCEPTION(isolate, receiver_string,
-                                     Object::ToString(isolate, receiver));
-
-  // Check if the search string is a regExp and fail if it is.
-  Handle<Object> search = args.at(1);
-  Maybe<bool> is_reg_exp = RegExpUtils::IsRegExp(isolate, search);
-  if (is_reg_exp.IsNothing()) {
-    DCHECK(isolate->has_pending_exception());
-    return ReadOnlyRoots(isolate).exception();
-  }
-  if (is_reg_exp.FromJust()) {
-    THROW_NEW_ERROR_RETURN_FAILURE(
-        isolate, NewTypeError(MessageTemplate::kFirstArgumentNotRegExp,
-                              isolate->factory()->NewStringFromStaticChars(
-                                  "String.prototype.includes")));
-  }
-  Handle<String> search_string;
-  ASSIGN_RETURN_FAILURE_ON_EXCEPTION(isolate, search_string,
-                                     Object::ToString(isolate, args.at(1)));
-  Handle<Object> position;
-  ASSIGN_RETURN_FAILURE_ON_EXCEPTION(isolate, position,
-                                     Object::ToInteger(isolate, args.at(2)));
-
-  uint32_t index = receiver_string->ToValidIndex(*position);
-  int index_in_str =
-      String::IndexOf(isolate, receiver_string, search_string, index);
-  return *isolate->factory()->ToBoolean(index_in_str != -1);
-}
-
-// ES6 #sec-string.prototype.indexof
-// String.prototype.indexOf(searchString [, position])
-RUNTIME_FUNCTION(Runtime_StringIndexOf) {
-  HandleScope scope(isolate);
-  DCHECK_EQ(3, args.length());
-  return String::IndexOf(isolate, args.at(0), args.at(1), args.at(2));
-}
-
-// ES6 #sec-string.prototype.indexof
-// String.prototype.indexOf(searchString, position)
-// Fast version that assumes that does not perform conversions of the incoming
-// arguments.
-RUNTIME_FUNCTION(Runtime_StringIndexOfUnchecked) {
-  HandleScope scope(isolate);
-  DCHECK_EQ(3, args.length());
-  Handle<String> receiver_string = args.at<String>(0);
-  Handle<String> search_string = args.at<String>(1);
-  int index = std::min(std::max(args.smi_at(2), 0), receiver_string->length());
-
-  return Smi::FromInt(String::IndexOf(isolate, receiver_string, search_string,
-                                      static_cast<uint32_t>(index)));
-}
-
 RUNTIME_FUNCTION(Runtime_StringLastIndexOf) {
   HandleScope handle_scope(isolate);
   return String::LastIndexOf(isolate, args.at(0), args.at(1),
@@ -214,9 +148,9 @@ RUNTIME_FUNCTION(Runtime_StringLastIndexOf) {
 RUNTIME_FUNCTION(Runtime_StringSubstring) {
   HandleScope scope(isolate);
   DCHECK_EQ(3, args.length());
-  CONVERT_ARG_HANDLE_CHECKED(String, string, 0);
-  CONVERT_INT32_ARG_CHECKED(start, 1);
-  CONVERT_INT32_ARG_CHECKED(end, 2);
+  Handle<String> string = args.at<String>(0);
+  int start = args.smi_value_at(1);
+  int end = args.smi_value_at(2);
   DCHECK_LE(0, start);
   DCHECK_LE(start, end);
   DCHECK_LE(end, string->length());
@@ -227,8 +161,8 @@ RUNTIME_FUNCTION(Runtime_StringSubstring) {
 RUNTIME_FUNCTION(Runtime_StringAdd) {
   HandleScope scope(isolate);
   DCHECK_EQ(2, args.length());
-  CONVERT_ARG_HANDLE_CHECKED(String, str1, 0);
-  CONVERT_ARG_HANDLE_CHECKED(String, str2, 1);
+  Handle<String> str1 = args.at<String>(0);
+  Handle<String> str2 = args.at<String>(1);
   isolate->counters()->string_add_runtime()->Increment();
   RETURN_RESULT_OR_FAILURE(isolate,
                            isolate->factory()->NewConsString(str1, str2));
@@ -238,7 +172,7 @@ RUNTIME_FUNCTION(Runtime_StringAdd) {
 RUNTIME_FUNCTION(Runtime_InternalizeString) {
   HandleScope handles(isolate);
   DCHECK_EQ(1, args.length());
-  CONVERT_ARG_HANDLE_CHECKED(String, string, 0);
+  Handle<String> string = args.at<String>(0);
   return *isolate->factory()->InternalizeString(string);
 }
 
@@ -246,8 +180,8 @@ RUNTIME_FUNCTION(Runtime_StringCharCodeAt) {
   HandleScope handle_scope(isolate);
   DCHECK_EQ(2, args.length());
 
-  CONVERT_ARG_HANDLE_CHECKED(String, subject, 0);
-  CONVERT_NUMBER_CHECKED(uint32_t, i, Uint32, args[1]);
+  Handle<String> subject = args.at<String>(0);
+  uint32_t i = NumberToUint32(args[1]);
 
   // Flatten the string.  If someone wants to get a char at an index
   // in a cons string, it is likely that more indices will be
@@ -264,12 +198,12 @@ RUNTIME_FUNCTION(Runtime_StringCharCodeAt) {
 RUNTIME_FUNCTION(Runtime_StringBuilderConcat) {
   HandleScope scope(isolate);
   DCHECK_EQ(3, args.length());
-  CONVERT_ARG_HANDLE_CHECKED(JSArray, array, 0);
+  Handle<JSArray> array = args.at<JSArray>(0);
   int32_t array_length;
   if (!args[1].ToInt32(&array_length)) {
     THROW_NEW_ERROR_RETURN_FAILURE(isolate, NewInvalidStringLengthError());
   }
-  CONVERT_ARG_HANDLE_CHECKED(String, special, 2);
+  Handle<String> special = args.at<String>(2);
 
   size_t actual_array_length = 0;
   CHECK(TryNumberToSize(array->length(), &actual_array_length));
@@ -370,8 +304,8 @@ static int CopyCachedOneByteCharsToArray(Heap* heap, const uint8_t* chars,
 RUNTIME_FUNCTION(Runtime_StringToArray) {
   HandleScope scope(isolate);
   DCHECK_EQ(2, args.length());
-  CONVERT_ARG_HANDLE_CHECKED(String, s, 0);
-  CONVERT_NUMBER_CHECKED(uint32_t, limit, Uint32, args[1]);
+  Handle<String> s = args.at<String>(0);
+  uint32_t limit = NumberToUint32(args[1]);
 
   s = String::Flatten(isolate, s);
   const int length =
@@ -381,12 +315,12 @@ RUNTIME_FUNCTION(Runtime_StringToArray) {
   int position = 0;
   if (s->IsFlat() && s->IsOneByteRepresentation()) {
     // Try using cached chars where possible.
-    elements = isolate->factory()->NewUninitializedFixedArray(length);
+    elements = isolate->factory()->NewFixedArray(length);
 
     DisallowGarbageCollection no_gc;
     String::FlatContent content = s->GetFlatContent(no_gc);
     if (content.IsOneByte()) {
-      Vector<const uint8_t> chars = content.ToOneByteVector();
+      base::Vector<const uint8_t> chars = content.ToOneByteVector();
       // Note, this will initialize all elements (not only the prefix)
       // to prevent GC from seeing partially initialized array.
       position = CopyCachedOneByteCharsToArray(isolate->heap(), chars.begin(),
@@ -416,8 +350,8 @@ RUNTIME_FUNCTION(Runtime_StringToArray) {
 RUNTIME_FUNCTION(Runtime_StringLessThan) {
   HandleScope handle_scope(isolate);
   DCHECK_EQ(2, args.length());
-  CONVERT_ARG_HANDLE_CHECKED(String, x, 0);
-  CONVERT_ARG_HANDLE_CHECKED(String, y, 1);
+  Handle<String> x = args.at<String>(0);
+  Handle<String> y = args.at<String>(1);
   ComparisonResult result = String::Compare(isolate, x, y);
   DCHECK_NE(result, ComparisonResult::kUndefined);
   return isolate->heap()->ToBoolean(
@@ -427,8 +361,8 @@ RUNTIME_FUNCTION(Runtime_StringLessThan) {
 RUNTIME_FUNCTION(Runtime_StringLessThanOrEqual) {
   HandleScope handle_scope(isolate);
   DCHECK_EQ(2, args.length());
-  CONVERT_ARG_HANDLE_CHECKED(String, x, 0);
-  CONVERT_ARG_HANDLE_CHECKED(String, y, 1);
+  Handle<String> x = args.at<String>(0);
+  Handle<String> y = args.at<String>(1);
   ComparisonResult result = String::Compare(isolate, x, y);
   DCHECK_NE(result, ComparisonResult::kUndefined);
   return isolate->heap()->ToBoolean(
@@ -438,8 +372,8 @@ RUNTIME_FUNCTION(Runtime_StringLessThanOrEqual) {
 RUNTIME_FUNCTION(Runtime_StringGreaterThan) {
   HandleScope handle_scope(isolate);
   DCHECK_EQ(2, args.length());
-  CONVERT_ARG_HANDLE_CHECKED(String, x, 0);
-  CONVERT_ARG_HANDLE_CHECKED(String, y, 1);
+  Handle<String> x = args.at<String>(0);
+  Handle<String> y = args.at<String>(1);
   ComparisonResult result = String::Compare(isolate, x, y);
   DCHECK_NE(result, ComparisonResult::kUndefined);
   return isolate->heap()->ToBoolean(
@@ -449,8 +383,8 @@ RUNTIME_FUNCTION(Runtime_StringGreaterThan) {
 RUNTIME_FUNCTION(Runtime_StringGreaterThanOrEqual) {
   HandleScope handle_scope(isolate);
   DCHECK_EQ(2, args.length());
-  CONVERT_ARG_HANDLE_CHECKED(String, x, 0);
-  CONVERT_ARG_HANDLE_CHECKED(String, y, 1);
+  Handle<String> x = args.at<String>(0);
+  Handle<String> y = args.at<String>(1);
   ComparisonResult result = String::Compare(isolate, x, y);
   DCHECK_NE(result, ComparisonResult::kUndefined);
   return isolate->heap()->ToBoolean(
@@ -460,15 +394,15 @@ RUNTIME_FUNCTION(Runtime_StringGreaterThanOrEqual) {
 RUNTIME_FUNCTION(Runtime_StringEqual) {
   HandleScope handle_scope(isolate);
   DCHECK_EQ(2, args.length());
-  CONVERT_ARG_HANDLE_CHECKED(String, x, 0);
-  CONVERT_ARG_HANDLE_CHECKED(String, y, 1);
+  Handle<String> x = args.at<String>(0);
+  Handle<String> y = args.at<String>(1);
   return isolate->heap()->ToBoolean(String::Equals(isolate, x, y));
 }
 
 RUNTIME_FUNCTION(Runtime_FlattenString) {
   HandleScope scope(isolate);
   DCHECK_EQ(1, args.length());
-  CONVERT_ARG_HANDLE_CHECKED(String, str, 0);
+  Handle<String> str = args.at<String>(0);
   return *String::Flatten(isolate, str);
 }
 
@@ -480,7 +414,7 @@ RUNTIME_FUNCTION(Runtime_StringMaxLength) {
 RUNTIME_FUNCTION(Runtime_StringEscapeQuotes) {
   HandleScope handle_scope(isolate);
   DCHECK_EQ(1, args.length());
-  CONVERT_ARG_HANDLE_CHECKED(String, string, 0);
+  Handle<String> string = args.at<String>(0);
 
   // Equivalent to global replacement `string.replace(/"/g, "&quot")`, but this
   // does not modify any global state (e.g. the regexp match info).
@@ -489,17 +423,17 @@ RUNTIME_FUNCTION(Runtime_StringEscapeQuotes) {
   Handle<String> quotes =
       isolate->factory()->LookupSingleCharacterStringFromCode('"');
 
-  int index = String::IndexOf(isolate, string, quotes, 0);
+  int quote_index = String::IndexOf(isolate, string, quotes, 0);
 
   // No quotes, nothing to do.
-  if (index == -1) return *string;
+  if (quote_index == -1) return *string;
 
   // Find all quotes.
-  std::vector<int> indices = {index};
-  while (index + 1 < string_length) {
-    index = String::IndexOf(isolate, string, quotes, index + 1);
-    if (index == -1) break;
-    indices.emplace_back(index);
+  std::vector<int> indices = {quote_index};
+  while (quote_index + 1 < string_length) {
+    quote_index = String::IndexOf(isolate, string, quotes, quote_index + 1);
+    if (quote_index == -1) break;
+    indices.emplace_back(quote_index);
   }
 
   // Build the replacement string.

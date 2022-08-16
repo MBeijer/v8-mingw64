@@ -3,6 +3,8 @@ set(CMAKE_USER_MAKE_RULES_OVERRIDE "${CMAKE_CURRENT_SOURCE_DIR}/cmake/MSVC.cmake
 set(CMAKE_DISABLE_IN_SOURCE_BUILD ON)
 project(V8 LANGUAGES CXX C ASM)
 
+option(V8CMAKE_FIND_PYTHON "Enable finding python" ON)
+
 if(MSVC)
   enable_language(ASM_MASM)
   set_property(
@@ -14,10 +16,20 @@ if(MSVC)
 
 endif()
 
+add_definitions("-DV8_ENABLE_WEBASSEMBLY -DV8_ADVANCED_BIGINT_ALGORITHMS")
+if(WIN32)
+  add_definitions("-DNOMINMAX -DV8_ENABLE_SYSTEM_INSTRUMENTATION")
+  # todo: for zlib, need to extract zlib when refactor
+  add_definitions("-DX86_WINDOWS")
+  add_definitions("-D_WIN32_WINNT=0x0602")
+endif()
+
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 
-find_package(Python 3 REQUIRED QUIET COMPONENTS Interpreter)
+if (V8CMAKE_FIND_PYTHON)
+  find_package(Python 3 REQUIRED QUIET COMPONENTS Interpreter)
+endif()
 find_package(Threads QUIET)
 
 include(CMakeDependentOption)
@@ -29,7 +41,7 @@ include(GenerateBuiltinsList)
 check_python_module_exists(PYTHON_HAVE_MARKUPSAFE markupsafe)
 
 if (NOT CMAKE_CXX_STANDARD)
-  set(CMAKE_CXX_STANDARD 14)
+  set(CMAKE_CXX_STANDARD 17)
 endif()
 
 if (NOT CMAKE_C_STANDARD)
@@ -53,6 +65,9 @@ set(is-msvc $<CXX_COMPILER_ID:MSVC>)
 # FIXME obviously
 set(is-arm 0)
 set(is-arm64 0)
+if (CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "arm64")
+  set(is-arm64 1)
+endif ()
 set(is-ia32 0)
 set(is-mips 0)
 set(is-mips64 0)
@@ -70,12 +85,13 @@ option(V8_ENABLE_I18N "Enable Internationalization support")
 set(
   v8_defines
   $<${is-darwin}:V8_HAVE_TARGET_OS>
-  $<${is-darwin}:V8_TARGET_OS_MACOSX>
+  $<${is-darwin}:V8_TARGET_OS_MACOS>
   $<${is-linux}:V8_HAVE_TARGET_OS>
   $<${is-linux}:V8_TARGET_OS_LINUX>
   $<${is-win}:V8_HAVE_TARGET_OS>
   $<${is-win}:V8_TARGET_OS_WIN>
   $<${is-x64}:V8_TARGET_ARCH_X64>
+  $<${is-arm64}:V8_TARGET_ARCH_ARM64>
   $<${is-win}:NOMINMAX>
   $<$<AND:${is-win},${is-x64}>:V8_OS_WIN_X64>
   $<$<BOOL:${V8_ENABLE_CONCURRENT_MARKING}>:V8_CONCURRENT_MARKING>
@@ -107,6 +123,7 @@ add_executable(
   v8/src/d8/async-hooks-wrapper.cc
   v8/src/d8/d8-console.cc
   v8/src/d8/d8-js.cc
+  v8/src/d8/d8-test.cc
   v8/src/d8/d8-platforms.cc
   v8/src/d8/d8.cc
 )
@@ -170,6 +187,8 @@ file(GLOB api-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/ap
 file(GLOB asmjs-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/asmjs/*.cc)
 file(GLOB ast-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/ast/*.cc)
 file(GLOB builtin-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/builtins/*.cc)
+file(GLOB baseline-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/baseline/*.cc)
+file(GLOB bigint-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/bigint/*.cc)
 file(GLOB codegen-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/codegen/*.cc)
 file(GLOB debug-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/debug/*.cc)
 file(GLOB deoptimizer-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/deoptimizer/*.cc)
@@ -180,7 +199,7 @@ file(GLOB handles-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/sr
 file(GLOB interpreter-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/interpreter/*.cc)
 file(GLOB json-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/json/*.cc)
 file(GLOB logging-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/logging/*.cc)
-file(GLOB numbers-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/numbers/*.cc)
+file(GLOB numbers-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/base/numbers/*.cc v8/src/numbers/*.cc)
 file(GLOB object-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/objects/*.cc)
 file(GLOB parsing-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/parsing/*.cc)
 file(GLOB profiler-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/profiler/*.cc)
@@ -192,6 +211,7 @@ file(GLOB utils-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/
 file(GLOB wasm-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/wasm/*.cc)
 file(GLOB wasm-baseline-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/wasm/baseline/*.cc)
 file(GLOB zone-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/src/zone/*.cc)
+file(GLOB zlib-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS v8/third_party/zlib/*.c v8/third_party/zlib/google/compression_utils_portable.cc)
 
 file(GLOB heap-sources RELATIVE ${PROJECT_SOURCE_DIR} CONFIGURE_DEPENDS
   v8/src/heap/*.cc
@@ -233,6 +253,7 @@ list(REMOVE_ITEM builtin-sources
 )
 
 list(REMOVE_ITEM diagnostic-sources v8/src/diagnostics/unwinding-info-win64.cc)
+list(REMOVE_ITEM diagnostic-sources v8/src/diagnostics/system-jit-win.cc)
 list(REMOVE_ITEM object-sources ${i18n-sources})
 list(REMOVE_ITEM regexp-sources v8/src/regexp/gen-regexp-special-case.cc)
 list(REMOVE_ITEM runtime-sources v8/src/runtime/runtime-intl.cc)
@@ -247,33 +268,52 @@ list(APPEND snapshot-sources v8/src/snapshot/embedded/embedded-data.cc)
 list(APPEND wasm-sources ${wasm-baseline-sources})
 
 add_library(v8_base_without_compiler STATIC
-  $<$<AND:${is-x64},${is-posix}>:v8/src/trap-handler/handler-inside-posix.cc>
-  $<$<AND:${is-x64},${is-posix}>:v8/src/trap-handler/handler-outside-posix.cc>
+  $<${is-posix}:v8/src/trap-handler/handler-inside-posix.cc>
+  $<${is-posix}:v8/src/trap-handler/handler-outside-posix.cc>
   $<$<AND:${is-x64},${is-win}>:v8/src/diagnostics/unwinding-info-win64.cc>
+  $<$<AND:${is-x64},${is-win}>:v8/src/diagnostics/system-jit-win.cc>
   $<$<AND:${is-x64},${is-win}>:v8/src/trap-handler/handler-inside-win.cc>
   $<$<AND:${is-x64},${is-win}>:v8/src/trap-handler/handler-outside-win.cc>
   $<${is-x64}:v8/src/codegen/x64/assembler-x64.cc>
   $<${is-x64}:v8/src/codegen/x64/cpu-x64.cc>
-  $<${is-x64}:v8/src/codegen/x64/interface-descriptors-x64.cc>
   $<${is-x64}:v8/src/codegen/x64/macro-assembler-x64.cc>
+  $<${is-x64}:v8/src/codegen/shared-ia32-x64/macro-assembler-shared-ia32-x64.cc>
   $<${is-x64}:v8/src/compiler/backend/x64/code-generator-x64.cc>
   $<${is-x64}:v8/src/compiler/backend/x64/instruction-scheduler-x64.cc>
   $<${is-x64}:v8/src/compiler/backend/x64/instruction-selector-x64.cc>
   $<${is-x64}:v8/src/compiler/backend/x64/unwinding-info-writer-x64.cc>
-  $<${is-x64}:v8/src/debug/x64/debug-x64.cc>
   $<${is-x64}:v8/src/deoptimizer/x64/deoptimizer-x64.cc>
   $<${is-x64}:v8/src/diagnostics/x64/disasm-x64.cc>
   $<${is-x64}:v8/src/diagnostics/x64/eh-frame-x64.cc>
   $<${is-x64}:v8/src/execution/x64/frame-constants-x64.cc>
   $<${is-x64}:v8/src/regexp/x64/regexp-macro-assembler-x64.cc>
+  $<${is-arm64}:v8/src/codegen/arm64/assembler-arm64.cc>
+  $<${is-arm64}:v8/src/codegen/arm64/cpu-arm64.cc>
+  $<${is-arm64}:v8/src/codegen/arm64/decoder-arm64.cc>
+  $<${is-arm64}:v8/src/codegen/arm64/macro-assembler-arm64.cc>
+  $<${is-arm64}:v8/src/codegen/arm64/instructions-arm64.cc>
+  $<${is-arm64}:v8/src/codegen/arm64/instructions-arm64-constants.cc>
+  $<${is-arm64}:v8/src/codegen/arm64/register-arm64.cc>
+  $<${is-arm64}:v8/src/codegen/arm64/utils-arm64.cc>
+  $<${is-arm64}:v8/src/compiler/backend/arm64/code-generator-arm64.cc>
+  $<${is-arm64}:v8/src/compiler/backend/arm64/instruction-scheduler-arm64.cc>
+  $<${is-arm64}:v8/src/compiler/backend/arm64/instruction-selector-arm64.cc>
+  $<${is-arm64}:v8/src/compiler/backend/arm64/unwinding-info-writer-arm64.cc>
+  $<${is-arm64}:v8/src/deoptimizer/arm64/deoptimizer-arm64.cc>
+  $<${is-arm64}:v8/src/diagnostics/arm64/disasm-arm64.cc>
+  $<${is-arm64}:v8/src/diagnostics/arm64/eh-frame-arm64.cc>
+  $<${is-arm64}:v8/src/execution/arm64/frame-constants-arm64.cc>
+  $<${is-arm64}:v8/src/regexp/arm64/regexp-macro-assembler-arm64.cc>
   $<$<BOOL:${V8_ENABLE_I18N}>:$<TARGET_OBJECTS:v8-i18n-support>>
   ${api-sources}
   ${asmjs-sources}
   ${ast-sources}
   ${builtin-sources}
+  ${baseline-sources}
+  ${bigint-sources}
   ${codegen-sources}
   v8/src/common/assert-scope.cc
-  v8/src/compiler-dispatcher/compiler-dispatcher.cc
+  v8/src/compiler-dispatcher/lazy-compile-dispatcher.cc
   v8/src/compiler-dispatcher/optimizing-compile-dispatcher.cc
   v8/src/date/date.cc
   v8/src/date/dateparser.cc
@@ -307,7 +347,7 @@ add_library(v8_base_without_compiler STATIC
   ${regexp-sources}
   v8/src/roots/roots.cc
   ${runtime-sources}
-  v8/src/sanitizer/lsan-page-allocator.cc
+  v8/src/base/sanitizer/lsan-page-allocator.cc
   ${snapshot-sources}
   ${strings-sources}
   v8/src/tasks/cancelable-task.cc
@@ -316,13 +356,16 @@ add_library(v8_base_without_compiler STATIC
   v8/src/third_party/siphash/halfsiphash.cc
   v8/src/tracing/trace-event.cc
   v8/src/tracing/traced-value.cc
+  v8/src/web-snapshot/web-snapshot.cc
   v8/src/tracing/tracing-category-observer.cc
   v8/src/trap-handler/handler-inside.cc
   v8/src/trap-handler/handler-outside.cc
   v8/src/trap-handler/handler-shared.cc
+  v8/src/temporal/temporal-parser.cc
   ${utils-sources}
   ${wasm-sources}
   ${zone-sources}
+  ${zlib-sources}
   $<TARGET_OBJECTS:v8-adler32>
 )
 
@@ -427,7 +470,6 @@ add_library(
   v8/src/builtins/builtins-constructor-gen.cc
   v8/src/builtins/builtins-conversion-gen.cc
   v8/src/builtins/builtins-date-gen.cc
-  v8/src/builtins/builtins-debug-gen.cc
   v8/src/builtins/builtins-generator-gen.cc
   v8/src/builtins/builtins-global-gen.cc
   v8/src/builtins/builtins-handler-gen.cc
@@ -596,6 +638,7 @@ add_custom_command(
     Python::Interpreter
     v8/third_party/inspector_protocol/code_generator.py
     --config v8/src/inspector/inspector_protocol_config.json
+    --config_value protocol.path=v8/include/js_protocol.pdl
     --jinja_dir v8/third_party
     --output_base ${PROJECT_BINARY_DIR}/inspector/src/inspector
     --inspector_protocol_dir third_party/inspector_protocol
@@ -617,7 +660,6 @@ add_custom_command(
 add_library(v8_libplatform STATIC)
 target_sources(v8_libplatform
   PRIVATE
-    $<$<NOT:${is-win}>:v8/src/libplatform/tracing/recorder-default.cc>
     $<${is-win}:v8/src/libplatform/tracing/recorder-win.cc>
     v8/src/libplatform/default-foreground-task-runner.cc
     v8/src/libplatform/default-job.cc
@@ -683,8 +725,10 @@ add_library(v8_libbase STATIC
   v8/src/base/platform/time.cc
   v8/src/base/region-allocator.cc
   v8/src/base/sys-info.cc
+  v8/src/base/strings.cc
   v8/src/base/utils/random-number-generator.cc
   v8/src/base/vlq-base64.cc
+  v8/src/base/virtual-address-space.cc
   $<$<NOT:$<OR:${is-win},${is-aix}>>:v8/src/base/platform/platform-posix-time.cc>
   $<${is-win}:v8/src/base/platform/platform-win32.cc>
   $<${is-win}:v8/src/base/debug/stack_trace_win.cc>
@@ -692,6 +736,7 @@ add_library(v8_libbase STATIC
   $<${is-aix}:v8/src/base/platform/platform-aix.cc>
   $<${is-darwin}:v8/src/base/debug/stack_trace_posix.cc>
   $<${is-darwin}:v8/src/base/platform/platform-macos.cc>
+  $<${is-darwin}:v8/src/base/platform/platform-darwin.cc>
   $<${is-linux}:v8/src/base/debug/stack_trace_posix.cc>
   $<${is-linux}:v8/src/base/platform/platform-linux.cc>
   $<${is-posix}:v8/src/base/platform/platform-posix.cc>
@@ -758,6 +803,7 @@ list(APPEND torque_files ${torque-builtins})
 list(APPEND torque_files ${torque-objects})
 
 list(APPEND torque_files
+  src/debug/debug-wasm-objects.tq
   src/ic/handler-configuration.tq
   src/wasm/wasm-objects.tq
   test/torque/test-torque.tq

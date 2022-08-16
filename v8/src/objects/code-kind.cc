@@ -22,9 +22,9 @@ const char* CodeKindToMarker(CodeKind kind) {
   switch (kind) {
     case CodeKind::INTERPRETED_FUNCTION:
       return "~";
-    case CodeKind::NATIVE_CONTEXT_INDEPENDENT:
-      return "-";
-    case CodeKind::TURBOPROP:
+    case CodeKind::BASELINE:
+      return "^";
+    case CodeKind::MAGLEV:
       return "+";
     case CodeKind::TURBOFAN:
       return "*";

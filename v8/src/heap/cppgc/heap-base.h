@@ -8,19 +8,37 @@
 #include <memory>
 #include <set>
 
+#include "include/cppgc/heap-statistics.h"
 #include "include/cppgc/heap.h"
 #include "include/cppgc/internal/persistent-node.h"
 #include "include/cppgc/macros.h"
 #include "src/base/macros.h"
 #include "src/heap/cppgc/compactor.h"
+#include "src/heap/cppgc/garbage-collector.h"
+#include "src/heap/cppgc/heap-object-header.h"
 #include "src/heap/cppgc/marker.h"
+#include "src/heap/cppgc/metric-recorder.h"
 #include "src/heap/cppgc/object-allocator.h"
+#include "src/heap/cppgc/platform.h"
+#include "src/heap/cppgc/process-heap-statistics.h"
+#include "src/heap/cppgc/process-heap.h"
 #include "src/heap/cppgc/raw-heap.h"
 #include "src/heap/cppgc/sweeper.h"
+#include "v8config.h"  // NOLINT(build/include_directory)
 
 #if defined(CPPGC_CAGED_HEAP)
 #include "src/heap/cppgc/caged-heap.h"
 #endif
+
+#if defined(CPPGC_YOUNG_GENERATION)
+#include "src/heap/cppgc/remembered-set.h"
+#endif
+
+namespace v8 {
+namespace base {
+class LsanPageAllocator;
+}  // namespace base
+}  // namespace v8
 
 namespace heap {
 namespace base {
@@ -29,6 +47,15 @@ class Stack;
 }  // namespace heap
 
 namespace cppgc {
+namespace subtle {
+class DisallowGarbageCollectionScope;
+class NoGarbageCollectionScope;
+}  // namespace subtle
+
+namespace testing {
+class Heap;
+class OverrideEmbedderStackStateScope;
+}  // namespace testing
 
 class Platform;
 
@@ -40,10 +67,7 @@ class V8_EXPORT HeapHandle {
 
 namespace internal {
 
-namespace testing {
-class TestWithHeap;
-}  // namespace testing
-
+class FatalOutOfMemoryHandler;
 class PageBackend;
 class PreFinalizerHandler;
 class StatsCollector;
@@ -52,22 +76,8 @@ class StatsCollector;
 class V8_EXPORT_PRIVATE HeapBase : public cppgc::HeapHandle {
  public:
   using StackSupport = cppgc::Heap::StackSupport;
-
-  // NoGCScope allows going over limits and avoids triggering garbage
-  // collection triggered through allocations or even explicitly.
-  class V8_EXPORT_PRIVATE V8_NODISCARD NoGCScope final {
-    CPPGC_STACK_ALLOCATED();
-
-   public:
-    explicit NoGCScope(HeapBase& heap);
-    ~NoGCScope();
-
-    NoGCScope(const NoGCScope&) = delete;
-    NoGCScope& operator=(const NoGCScope&) = delete;
-
-   private:
-    HeapBase& heap_;
-  };
+  using MarkingType = cppgc::Heap::MarkingType;
+  using SweepingType = cppgc::Heap::SweepingType;
 
   static HeapBase& From(cppgc::HeapHandle& heap_handle) {
     return static_cast<HeapBase&>(heap_handle);
@@ -78,7 +88,8 @@ class V8_EXPORT_PRIVATE HeapBase : public cppgc::HeapHandle {
 
   HeapBase(std::shared_ptr<cppgc::Platform> platform,
            const std::vector<std::unique_ptr<CustomSpaceBase>>& custom_spaces,
-           StackSupport stack_support);
+           StackSupport stack_support, MarkingType marking_support,
+           SweepingType sweeping_support);
   virtual ~HeapBase();
 
   HeapBase(const HeapBase&) = delete;
@@ -89,6 +100,11 @@ class V8_EXPORT_PRIVATE HeapBase : public cppgc::HeapHandle {
 
   cppgc::Platform* platform() { return platform_.get(); }
   const cppgc::Platform* platform() const { return platform_.get(); }
+
+  FatalOutOfMemoryHandler& oom_handler() { return *oom_handler_.get(); }
+  const FatalOutOfMemoryHandler& oom_handler() const {
+    return *oom_handler_.get();
+  }
 
   PageBackend* page_backend() { return page_backend_.get(); }
   const PageBackend* page_backend() const { return page_backend_.get(); }
@@ -108,14 +124,20 @@ class V8_EXPORT_PRIVATE HeapBase : public cppgc::HeapHandle {
   PreFinalizerHandler* prefinalizer_handler() {
     return prefinalizer_handler_.get();
   }
+  const PreFinalizerHandler* prefinalizer_handler() const {
+    return prefinalizer_handler_.get();
+  }
 
   MarkerBase* marker() const { return marker_.get(); }
+  std::unique_ptr<MarkerBase>& GetMarkerRefForTesting() { return marker_; }
 
   Compactor& compactor() { return compactor_; }
 
   ObjectAllocator& object_allocator() { return object_allocator_; }
+  const ObjectAllocator& object_allocator() const { return object_allocator_; }
 
   Sweeper& sweeper() { return sweeper_; }
+  const Sweeper& sweeper() const { return sweeper_; }
 
   PersistentRegion& GetStrongPersistentRegion() {
     return strong_persistent_region_;
@@ -129,44 +151,102 @@ class V8_EXPORT_PRIVATE HeapBase : public cppgc::HeapHandle {
   const PersistentRegion& GetWeakPersistentRegion() const {
     return weak_persistent_region_;
   }
-  PersistentRegion& GetStrongCrossThreadPersistentRegion() {
+  CrossThreadPersistentRegion& GetStrongCrossThreadPersistentRegion() {
     return strong_cross_thread_persistent_region_;
   }
-  const PersistentRegion& GetStrongCrossThreadPersistentRegion() const {
+  const CrossThreadPersistentRegion& GetStrongCrossThreadPersistentRegion()
+      const {
     return strong_cross_thread_persistent_region_;
   }
-  PersistentRegion& GetWeakCrossThreadPersistentRegion() {
+  CrossThreadPersistentRegion& GetWeakCrossThreadPersistentRegion() {
     return weak_cross_thread_persistent_region_;
   }
-  const PersistentRegion& GetWeakCrossThreadPersistentRegion() const {
+  const CrossThreadPersistentRegion& GetWeakCrossThreadPersistentRegion()
+      const {
     return weak_cross_thread_persistent_region_;
   }
 
 #if defined(CPPGC_YOUNG_GENERATION)
-  std::set<void*>& remembered_slots() { return remembered_slots_; }
-#endif
+  OldToNewRememberedSet& remembered_set() { return remembered_set_; }
+#endif  // defined(CPPGC_YOUNG_GENERATION)
 
   size_t ObjectPayloadSize() const;
 
   StackSupport stack_support() const { return stack_support_; }
+  const EmbedderStackState* override_stack_state() const {
+    return override_stack_state_.get();
+  }
 
-  void AdvanceIncrementalGarbageCollectionOnAllocationIfNeeded();
+  // Termination drops all roots (clears them out) and runs garbage collections
+  // in a bounded fixed point loop  until no new objects are created in
+  // destructors. Exceeding the loop bound results in a crash.
+  void Terminate();
 
-  // Notifies the heap that a GC is done.
-  virtual void PostGarbageCollection() = 0;
+  bool in_disallow_gc_scope() const { return disallow_gc_scope_ > 0; }
+  bool in_atomic_pause() const { return in_atomic_pause_; }
+
+  HeapStatistics CollectStatistics(HeapStatistics::DetailLevel);
+
+  EmbedderStackState stack_state_of_prev_gc() const {
+    return stack_state_of_prev_gc_;
+  }
+  void SetStackStateOfPrevGC(EmbedderStackState stack_state) {
+    stack_state_of_prev_gc_ = stack_state;
+  }
+
+  uintptr_t stack_end_of_current_gc() const { return stack_end_of_current_gc_; }
+  void SetStackEndOfCurrentGC(uintptr_t stack_end) {
+    stack_end_of_current_gc_ = stack_end;
+  }
+
+  void SetInAtomicPauseForTesting(bool value) { in_atomic_pause_ = value; }
+
+  virtual void StartIncrementalGarbageCollectionForTesting() = 0;
+  virtual void FinalizeIncrementalGarbageCollectionForTesting(
+      EmbedderStackState) = 0;
+
+  void SetMetricRecorder(std::unique_ptr<MetricRecorder> histogram_recorder) {
+    stats_collector_->SetMetricRecorder(std::move(histogram_recorder));
+  }
+
+  int GetCreationThreadId() const { return creation_thread_id_; }
+
+  MarkingType marking_support() const { return marking_support_; }
+  SweepingType sweeping_support() const { return sweeping_support_; }
 
  protected:
+  // Used by the incremental scheduler to finalize a GC if supported.
   virtual void FinalizeIncrementalGarbageCollectionIfNeeded(
       cppgc::Heap::StackState) = 0;
 
   bool in_no_gc_scope() const { return no_gc_scope_ > 0; }
 
+  bool IsMarking() const { return marker_.get(); }
+
+  // Returns amount of bytes allocated while executing prefinalizers.
+  size_t ExecutePreFinalizers();
+
+#if defined(CPPGC_YOUNG_GENERATION)
+  void ResetRememberedSet();
+#endif  // defined(CPPGC_YOUNG_GENERATION)
+
+  PageAllocator* page_allocator() const;
+
   RawHeap raw_heap_;
   std::shared_ptr<cppgc::Platform> platform_;
+  std::unique_ptr<FatalOutOfMemoryHandler> oom_handler_;
+
+#if defined(LEAK_SANITIZER)
+  std::unique_ptr<v8::base::LsanPageAllocator> lsan_page_allocator_;
+#endif  // LEAK_SANITIZER
+
 #if defined(CPPGC_CAGED_HEAP)
   CagedHeap caged_heap_;
-#endif
+#endif  // CPPGC_CAGED_HEAP
   std::unique_ptr<PageBackend> page_backend_;
+
+  // HeapRegistry requires access to page_backend_.
+  HeapRegistry::Subscription heap_registry_subscription_{*this};
 
   std::unique_ptr<StatsCollector> stats_collector_;
   std::unique_ptr<heap::base::Stack> stack_;
@@ -179,19 +259,39 @@ class V8_EXPORT_PRIVATE HeapBase : public cppgc::HeapHandle {
 
   PersistentRegion strong_persistent_region_;
   PersistentRegion weak_persistent_region_;
-  PersistentRegion strong_cross_thread_persistent_region_;
-  PersistentRegion weak_cross_thread_persistent_region_;
+  CrossThreadPersistentRegion strong_cross_thread_persistent_region_;
+  CrossThreadPersistentRegion weak_cross_thread_persistent_region_;
 
+  ProcessHeapStatisticsUpdater::AllocationObserverImpl
+      allocation_observer_for_PROCESS_HEAP_STATISTICS_;
 #if defined(CPPGC_YOUNG_GENERATION)
-  std::set<void*> remembered_slots_;
-#endif
+  OldToNewRememberedSet remembered_set_;
+#endif  // defined(CPPGC_YOUNG_GENERATION)
 
   size_t no_gc_scope_ = 0;
+  size_t disallow_gc_scope_ = 0;
 
   const StackSupport stack_support_;
+  EmbedderStackState stack_state_of_prev_gc_ =
+      EmbedderStackState::kNoHeapPointers;
+  std::unique_ptr<EmbedderStackState> override_stack_state_;
+
+  // Marker that signals end of the interesting stack region in which on-heap
+  // pointers can be found.
+  uintptr_t stack_end_of_current_gc_ = 0;
+
+  bool in_atomic_pause_ = false;
+
+  int creation_thread_id_ = v8::base::OS::GetCurrentThreadId();
+
+  const MarkingType marking_support_;
+  const SweepingType sweeping_support_;
 
   friend class MarkerBase::IncrementalMarkingTask;
-  friend class testing::TestWithHeap;
+  friend class cppgc::subtle::DisallowGarbageCollectionScope;
+  friend class cppgc::subtle::NoGarbageCollectionScope;
+  friend class cppgc::testing::Heap;
+  friend class cppgc::testing::OverrideEmbedderStackStateScope;
 };
 
 }  // namespace internal

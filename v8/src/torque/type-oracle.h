@@ -114,6 +114,10 @@ class TypeOracle : public ContextualClass<TypeOracle> {
     return Declarations::LookupGlobalUniqueGenericType(SMI_TAGGED_TYPE_STRING);
   }
 
+  static GenericType* GetLazyGeneric() {
+    return Declarations::LookupGlobalUniqueGenericType(LAZY_TYPE_STRING);
+  }
+
   static const Type* GetReferenceType(const Type* referenced_type,
                                       bool is_const) {
     return GetGenericTypeInstance(GetReferenceGeneric(is_const),
@@ -263,6 +267,14 @@ class TypeOracle : public ContextualClass<TypeOracle> {
     return Get().GetBuiltinType(UINTPTR_TYPE_STRING);
   }
 
+  static const Type* GetInt64Type() {
+    return Get().GetBuiltinType(INT64_TYPE_STRING);
+  }
+
+  static const Type* GetUint64Type() {
+    return Get().GetBuiltinType(UINT64_TYPE_STRING);
+  }
+
   static const Type* GetInt32Type() {
     return Get().GetBuiltinType(INT32_TYPE_STRING);
   }
@@ -301,6 +313,10 @@ class TypeOracle : public ContextualClass<TypeOracle> {
 
   static const Type* GetConstFloat64Type() {
     return Get().GetBuiltinType(CONST_FLOAT64_TYPE_STRING);
+  }
+
+  static const Type* GetIntegerLiteralType() {
+    return Get().GetBuiltinType(INTEGER_LITERAL_TYPE_STRING);
   }
 
   static const Type* GetNeverType() {

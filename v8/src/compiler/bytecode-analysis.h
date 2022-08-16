@@ -99,7 +99,7 @@ struct V8_EXPORT_PRIVATE LoopInfo {
 class V8_EXPORT_PRIVATE BytecodeAnalysis : public ZoneObject {
  public:
   BytecodeAnalysis(Handle<BytecodeArray> bytecode_array, Zone* zone,
-                   BailoutId osr_bailout_id, bool analyze_liveness);
+                   BytecodeOffset osr_bailout_id, bool analyze_liveness);
   BytecodeAnalysis(const BytecodeAnalysis&) = delete;
   BytecodeAnalysis& operator=(const BytecodeAnalysis&) = delete;
 
@@ -110,6 +110,11 @@ class V8_EXPORT_PRIVATE BytecodeAnalysis : public ZoneObject {
   int GetLoopOffsetFor(int offset) const;
   // Get the loop info of the loop header at {header_offset}.
   const LoopInfo& GetLoopInfoFor(int header_offset) const;
+  // Try to get the loop info of the loop header at {header_offset}, returning
+  // null if there isn't any.
+  const LoopInfo* TryGetLoopInfoFor(int header_offset) const;
+
+  const ZoneMap<int, LoopInfo>& GetLoopInfos() const { return header_to_info_; }
 
   // Get the top-level resume jump targets.
   const ZoneVector<ResumeJumpTarget>& resume_jump_targets() const {
@@ -128,10 +133,14 @@ class V8_EXPORT_PRIVATE BytecodeAnalysis : public ZoneObject {
     return osr_entry_point_;
   }
   // Return the osr_bailout_id (for verification purposes).
-  BailoutId osr_bailout_id() const { return osr_bailout_id_; }
+  BytecodeOffset osr_bailout_id() const { return osr_bailout_id_; }
 
   // Return whether liveness analysis was performed (for verification purposes).
   bool liveness_analyzed() const { return analyze_liveness_; }
+
+  // Return the number of bytecodes (i.e. the number of bytecode operations, as
+  // opposed to the number of bytes in the bytecode).
+  int bytecode_count() const { return bytecode_count_; }
 
  private:
   struct LoopStackEntry {
@@ -167,7 +176,7 @@ class V8_EXPORT_PRIVATE BytecodeAnalysis : public ZoneObject {
 
   Handle<BytecodeArray> const bytecode_array_;
   Zone* const zone_;
-  BailoutId const osr_bailout_id_;
+  BytecodeOffset const osr_bailout_id_;
   bool const analyze_liveness_;
   ZoneStack<LoopStackEntry> loop_stack_;
   ZoneVector<int> loop_end_index_queue_;
@@ -176,6 +185,7 @@ class V8_EXPORT_PRIVATE BytecodeAnalysis : public ZoneObject {
   ZoneMap<int, LoopInfo> header_to_info_;
   int osr_entry_point_;
   base::Optional<BytecodeLivenessMap> liveness_map_;
+  int bytecode_count_;
 };
 
 }  // namespace compiler

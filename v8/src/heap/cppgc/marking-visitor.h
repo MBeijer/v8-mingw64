@@ -16,26 +16,26 @@ namespace internal {
 class HeapBase;
 class HeapObjectHeader;
 class Marker;
-class MarkingStateBase;
+class BasicMarkingState;
 class MutatorMarkingState;
 class ConcurrentMarkingState;
 
 class V8_EXPORT_PRIVATE MarkingVisitorBase : public VisitorBase {
  public:
-  MarkingVisitorBase(HeapBase&, MarkingStateBase&);
+  MarkingVisitorBase(HeapBase&, BasicMarkingState&);
   ~MarkingVisitorBase() override = default;
 
  protected:
   void Visit(const void*, TraceDescriptor) final;
   void VisitWeak(const void*, TraceDescriptor, WeakCallback, const void*) final;
-  void VisitEphemeron(const void*, TraceDescriptor) final;
+  void VisitEphemeron(const void*, const void*, TraceDescriptor) final;
   void VisitWeakContainer(const void* self, TraceDescriptor strong_desc,
                           TraceDescriptor weak_desc, WeakCallback callback,
                           const void* data) final;
   void RegisterWeakCallback(WeakCallback, const void*) final;
   void HandleMovableReference(const void**) final;
 
-  MarkingStateBase& marking_state_;
+  BasicMarkingState& marking_state_;
 };
 
 class V8_EXPORT_PRIVATE MutatorMarkingVisitor : public MarkingVisitorBase {

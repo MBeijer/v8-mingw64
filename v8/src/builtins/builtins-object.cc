@@ -105,12 +105,12 @@ Object ObjectLookupAccessor(Isolate* isolate, Handle<Object> object,
                             Handle<Object> key, AccessorComponent component) {
   ASSIGN_RETURN_FAILURE_ON_EXCEPTION(isolate, object,
                                      Object::ToObject(isolate, object));
-  // TODO(jkummerow/verwaest): LookupIterator::Key(..., bool*) performs a
+  // TODO(jkummerow/verwaest): PropertyKey(..., bool*) performs a
   // functionally equivalent conversion, but handles element indices slightly
   // differently. Does one of the approaches have a performance advantage?
   ASSIGN_RETURN_FAILURE_ON_EXCEPTION(isolate, key,
                                      Object::ToPropertyKey(isolate, key));
-  LookupIterator::Key lookup_key(isolate, key);
+  PropertyKey lookup_key(isolate, key);
   LookupIterator it(isolate, object, lookup_key,
                     LookupIterator::PROTOTYPE_CHAIN_SKIP_INTERCEPTOR);
 
@@ -157,8 +157,9 @@ Object ObjectLookupAccessor(Isolate* isolate, Handle<Object> object,
       case LookupIterator::ACCESSOR: {
         Handle<Object> maybe_pair = it.GetAccessors();
         if (maybe_pair->IsAccessorPair()) {
-          Handle<NativeContext> native_context =
-              it.GetHolder<JSReceiver>()->GetCreationContext();
+          Handle<NativeContext> native_context = it.GetHolder<JSReceiver>()
+                                                     ->GetCreationContext()
+                                                     .ToHandleChecked();
           return *AccessorPair::GetComponent(
               isolate, native_context, Handle<AccessorPair>::cast(maybe_pair),
               component);
@@ -259,8 +260,9 @@ BUILTIN(ObjectPrototypeSetProto) {
 
   // 4. Let status be ? O.[[SetPrototypeOf]](proto).
   // 5. If status is false, throw a TypeError exception.
-  MAYBE_RETURN(JSReceiver::SetPrototype(receiver, proto, true, kThrowOnError),
-               ReadOnlyRoots(isolate).exception());
+  MAYBE_RETURN(
+      JSReceiver::SetPrototype(isolate, receiver, proto, true, kThrowOnError),
+      ReadOnlyRoots(isolate).exception());
 
   // Return undefined.
   return ReadOnlyRoots(isolate).undefined_value();

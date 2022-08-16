@@ -34,7 +34,8 @@ Protocol.Debugger.onPaused(async msg => {
   for (let [nr, frame] of msg.params.callFrames.entries()) {
     InspectorTest.log(`--- ${nr} ---`);
     await session.logSourceLocation(frame.location);
-    if (/^wasm/.test(frame.url)) await printLocalScope(frame);
+    if (/^wasm/.test(session.getCallFrameUrl(frame)))
+      await printLocalScope(frame);
   }
   InspectorTest.log('-------------');
   let action = actions.shift();
@@ -64,6 +65,7 @@ contextGroup.addScript(call_div.toString());
 
 InspectorTest.runAsyncTestSuite([
   async function test() {
+    await Protocol.Runtime.enable();
     await Protocol.Debugger.enable();
     await Protocol.Debugger.setPauseOnExceptions({state: 'all'});
     InspectorTest.log('Instantiating.');
@@ -80,8 +82,9 @@ async function printLocalScope(frame) {
     if (scope.type != 'local') continue;
     let properties = await Protocol.Runtime.getProperties(
         {'objectId': scope.object.objectId});
-    for (let value of properties.result.result) {
-      InspectorTest.log(`   ${value.name}: ${value.value.value}`);
+    for (let {name, value} of properties.result.result) {
+      value = await WasmInspectorTest.getWasmValue(value);
+      InspectorTest.log(`   ${name}: ${value}`);
     }
   }
 }
