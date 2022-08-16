@@ -1,6 +1,6 @@
 #!/bin/bash
 mkdir -p build-linux && \
-	./run-linux cmake -S. -Bbuild-linux && \
+	./run-linux cmake -S. -Bbuild-linux -DCMAKE_BUILD_TYPE=Release -G Ninja && \
 	./run-linux cmake --build build-linux --parallel $(nproc) --verbose
 #	./run-linux cmake --build build-linux --parallel $(nproc) --verbose
 

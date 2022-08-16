@@ -1,6 +1,6 @@
 #!/bin/bash
 mkdir -p build && \
-	./run-mingw cmake -S. -Bbuild -G Ninja && \
+	./run-mingw cmake -S. -Bbuild -DCMAKE_BUILD_TYPE=Release -G Ninja && \
 	./run-mingw cmake --build build --target bytecode_builtins_list_generator --parallel $(nproc) && \
 	./run-mingw cmake --build build --parallel $(nproc) --verbose
 
